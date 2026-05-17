@@ -8,9 +8,17 @@
     "start": "next start"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-serif": "^5.2.7",
+    "@google/genai": "^1.52.0",
+    "firebase": "^12.12.1",
+    "idb-keyval": "^6.2.2",
+    "lucide-react": "^1.14.0",
     "next": "16.2.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tldraw": "^4.5.10",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
