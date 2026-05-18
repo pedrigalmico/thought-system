@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { X, Crosshair, Pencil, Zap, RotateCw, RefreshCw, Loader2 } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { PushBackDialog } from "./debate/PushBackDialog";
 import { SynthesisFooter } from "./debate/SynthesisFooter";
+import { saveIntent, saveDebateState } from "@/lib/db";
+import { analyzeDraft, checkReality, scrubTone } from "@/lib/ai";
 import type { DraftItem } from "@/lib/types";
 
 export function SparringRing() {
@@ -18,12 +20,117 @@ export function SparringRing() {
   const scrubRows = useStore((s) => s.scrubRows);
   const setScrubAccepted = useStore((s) => s.setScrubAccepted);
   const debateLoading = useStore((s) => s.debateLoading);
-  const gate = useStore((s) => s.gate);
 
   const activeCounterId = useStore((s) => s.activeCounterId);
   const setActiveCounterId = useStore((s) => s.setActiveCounterId);
 
+  const intent = useStore((s) => s.intent);
+  const setIntent = useStore((s) => s.setIntent);
+  const topicId = useStore((s) => s.topicId);
+  const setCounters = useStore((s) => s.setCounters);
+  const setRealityRows = useStore((s) => s.setRealityRows);
+  const setScrubRows = useStore((s) => s.setScrubRows);
+  const setDebateLoading = useStore((s) => s.setDebateLoading);
+  const debateGenerated = useStore((s) => s.debateGenerated);
+  const setDebateGenerated = useStore((s) => s.setDebateGenerated);
+  const resetDebate = useStore((s) => s.resetDebate);
+  const staleRealityCheck = useStore((s) => s.staleRealityCheck);
+  const staleToneScrubber = useStore((s) => s.staleToneScrubber);
+  const clearRealityStale = useStore((s) => s.clearRealityStale);
+  const clearToneStale = useStore((s) => s.clearToneStale);
+
   const [pushBackId, setPushBackId] = useState<string | null>(null);
+  const [intentEditing, setIntentEditing] = useState(false);
+  const [intentDraft, setIntentDraft] = useState(intent);
+  const intentRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => { setIntentDraft(intent); }, [intent]);
+
+  const autoResize = useCallback(() => {
+    const ta = intentRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  }, []);
+
+  useEffect(() => {
+    if (intentEditing && intentRef.current) {
+      intentRef.current.focus();
+      intentRef.current.setSelectionRange(intentRef.current.value.length, intentRef.current.value.length);
+      requestAnimationFrame(autoResize);
+    }
+  }, [intentEditing, autoResize]);
+
+  const commitIntent = useCallback(() => {
+    const trimmed = intentDraft.trim();
+    setIntent(trimmed);
+    setIntentEditing(false);
+    if (topicId) saveIntent(topicId, trimmed).catch(console.error);
+  }, [intentDraft, topicId, setIntent]);
+
+  const runAnalysis = useCallback(async () => {
+    const d = items.find((i) => i.kind === "draft") as DraftItem | undefined;
+    if (!d || (!d.title && d.body.length === 0)) return;
+
+    resetDebate();
+    setDebateLoading("advocate", true);
+
+    try {
+      const currentIntent = useStore.getState().intent || undefined;
+      const result = await analyzeDraft(d, currentIntent);
+
+      setCounters(result.counters);
+      setRealityRows(result.claims);
+      setScrubRows(result.scrubs);
+      setDebateGenerated(true);
+
+      if (topicId) {
+        saveDebateState(topicId, {
+          counters: result.counters,
+          realityRows: result.claims,
+          scrubRows: result.scrubs,
+        }).catch(console.error);
+      }
+    } catch (err) {
+      console.error("Analysis error:", err);
+    } finally {
+      setDebateLoading("advocate", false);
+    }
+  }, [items, topicId, resetDebate, setCounters, setRealityRows, setScrubRows, setDebateLoading, setDebateGenerated]);
+
+  const [refreshingTab, setRefreshingTab] = useState<"reality" | "tone" | null>(null);
+
+  const refreshReality = useCallback(async () => {
+    const d = items.find((i) => i.kind === "draft") as DraftItem | undefined;
+    if (!d) return;
+    setRefreshingTab("reality");
+    try {
+      const currentIntent = useStore.getState().intent || undefined;
+      const rows = await checkReality(d, currentIntent);
+      setRealityRows(rows);
+      clearRealityStale();
+    } catch (err) {
+      console.error("Reality refresh error:", err);
+    } finally {
+      setRefreshingTab(null);
+    }
+  }, [items, setRealityRows, clearRealityStale]);
+
+  const refreshTone = useCallback(async () => {
+    const d = items.find((i) => i.kind === "draft") as DraftItem | undefined;
+    if (!d) return;
+    setRefreshingTab("tone");
+    try {
+      const currentIntent = useStore.getState().intent || undefined;
+      const rows = await scrubTone(d, currentIntent);
+      setScrubRows(rows);
+      clearToneStale();
+    } catch (err) {
+      console.error("Tone refresh error:", err);
+    } finally {
+      setRefreshingTab(null);
+    }
+  }, [items, setScrubRows, clearToneStale]);
 
   const draft = items.find((i) => i.kind === "draft") as DraftItem | undefined;
   const resolved = counters.filter((c) => c.status !== "open").length;
@@ -37,16 +144,80 @@ export function SparringRing() {
             <span className="live-dot" />
             Sparring Ring · Live
           </div>
-          <div className="panel-title">
-            {gate === "debate" ? "Challenge your draft" : "Three counters to your draft"}
-          </div>
+          <div className="panel-title">Challenge your draft</div>
         </div>
         <button className="panel-close" onClick={closePanel} aria-label="Close panel">
           <X size={14} />
         </button>
       </div>
 
-      {gate === "debate" && total > 0 && (
+      {/* ── Intent (North Star) ── */}
+      <div className="intent-section">
+        <div className="intent-header">
+          <div className="intent-label">
+            <Crosshair size={12} />
+            Intent
+          </div>
+          {intent && !intentEditing && (
+            <button className="intent-edit" onClick={() => setIntentEditing(true)} aria-label="Edit intent">
+              <Pencil size={11} />
+            </button>
+          )}
+        </div>
+
+        {!intent && !intentEditing ? (
+          <button className="intent-empty" onClick={() => setIntentEditing(true)}>
+            What should the reader think, feel, or do?
+          </button>
+        ) : intentEditing ? (
+          <div className="intent-editor">
+            <textarea
+              ref={intentRef}
+              className="intent-textarea"
+              value={intentDraft}
+              onChange={(e) => { setIntentDraft(e.target.value); autoResize(); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitIntent(); }
+                if (e.key === "Escape") { setIntentDraft(intent); setIntentEditing(false); }
+              }}
+              placeholder="e.g. Get DMs from ops leaders asking about our automation approach"
+              rows={1}
+            />
+            <div className="intent-actions">
+              <button className="intent-save" onClick={commitIntent}>Set</button>
+              <button className="intent-cancel" onClick={() => { setIntentDraft(intent); setIntentEditing(false); }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="intent-value">{intent}</div>
+        )}
+      </div>
+
+      {/* ── Analyze trigger ── */}
+      {!debateGenerated && !debateLoading.advocate ? (
+        <div className="analyze-section">
+          <button
+            className="analyze-btn"
+            onClick={runAnalysis}
+            disabled={!draft || (!draft.title && draft.body.length === 0)}
+          >
+            <Zap size={13} />
+            Analyze Draft
+          </button>
+          <div className="analyze-hint">AI will challenge your draft from multiple angles</div>
+        </div>
+      ) : debateGenerated && !debateLoading.advocate ? (
+        <div className="reanalyze-bar">
+          <button className="reanalyze-btn" onClick={runAnalysis}>
+            <RotateCw size={11} />
+            Re-analyze
+          </button>
+        </div>
+      ) : null}
+
+      {total > 0 && (
         <div className="progress-dots">
           {counters.map((c) => (
             <div key={c.id} className={`progress-dot ${c.status !== "open" ? "filled" : ""}`} />
@@ -71,6 +242,7 @@ export function SparringRing() {
           onClick={() => setRingTab("reality")}
         >
           Reality Check
+          {staleRealityCheck && <span className="stale-dot" />}
         </button>
         <button
           role="tab"
@@ -79,6 +251,7 @@ export function SparringRing() {
           onClick={() => setRingTab("tone")}
         >
           Tone Scrubber
+          {staleToneScrubber && <span className="stale-dot" />}
         </button>
       </div>
 
@@ -97,7 +270,7 @@ export function SparringRing() {
             ) : counters.length === 0 ? (
               <div className="panel-empty">
                 <div className="panel-empty-text">
-                  No counters yet. Enter Debate with a draft to generate them.
+                  No counters yet. Write your draft and they&apos;ll appear automatically.
                 </div>
               </div>
             ) : (
@@ -127,19 +300,19 @@ export function SparringRing() {
                     <div className="counter-actions">
                       <button
                         className="counter-action"
-                        onClick={() => setCounterStatus(c.id, "adopted")}
+                        onClick={(e) => { e.stopPropagation(); setCounterStatus(c.id, "adopted"); }}
                       >
                         Adopt
                       </button>
                       <button
                         className="counter-action"
-                        onClick={() => setCounterStatus(c.id, "dismissed")}
+                        onClick={(e) => { e.stopPropagation(); setCounterStatus(c.id, "dismissed"); }}
                       >
                         Dismiss
                       </button>
                       <button
                         className="counter-action"
-                        onClick={() => setPushBackId(c.id)}
+                        onClick={(e) => { e.stopPropagation(); setPushBackId(c.id); }}
                       >
                         Push back
                       </button>
@@ -187,7 +360,23 @@ export function SparringRing() {
           <>
             <div className="ring-section-label">Claims & Sources</div>
 
-            {debateLoading.reality ? (
+            {staleRealityCheck && (
+              <div className="stale-banner">
+                <span>Draft has changed since this analysis</span>
+                <button className="stale-refresh" onClick={refreshReality} disabled={refreshingTab === "reality"}>
+                  {refreshingTab === "reality" ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}
+                  Refresh
+                </button>
+              </div>
+            )}
+
+            {refreshingTab === "reality" ? (
+              <>
+                <div className="loading-skeleton skeleton-row" />
+                <div className="loading-skeleton skeleton-row" />
+                <div className="loading-skeleton skeleton-row" />
+              </>
+            ) : debateLoading.reality ? (
               <>
                 <div className="loading-skeleton skeleton-row" />
                 <div className="loading-skeleton skeleton-row" />
@@ -228,7 +417,22 @@ export function SparringRing() {
           <>
             <div className="ring-section-label">Slop Flags</div>
 
-            {debateLoading.tone ? (
+            {staleToneScrubber && (
+              <div className="stale-banner">
+                <span>Draft has changed since this analysis</span>
+                <button className="stale-refresh" onClick={refreshTone} disabled={refreshingTab === "tone"}>
+                  {refreshingTab === "tone" ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}
+                  Refresh
+                </button>
+              </div>
+            )}
+
+            {refreshingTab === "tone" ? (
+              <>
+                <div className="loading-skeleton skeleton-row" />
+                <div className="loading-skeleton skeleton-row" />
+              </>
+            ) : debateLoading.tone ? (
               <>
                 <div className="loading-skeleton skeleton-row" />
                 <div className="loading-skeleton skeleton-row" />
@@ -269,17 +473,7 @@ export function SparringRing() {
         )}
       </div>
 
-      {gate === "debate" ? (
-        <SynthesisFooter />
-      ) : (
-        <div className="ring-input-area">
-          <div className="ring-input-label">Push back</div>
-          <textarea
-            className="ring-input"
-            placeholder="Reply to a counter, or ask for a different angle…"
-          />
-        </div>
-      )}
+      <SynthesisFooter />
     </aside>
   );
 }

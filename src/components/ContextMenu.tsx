@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { StickyNote, Link2, ImageIcon, Film, Mic, FileText } from "lucide-react";
+import { StickyNote, Link2, ImageIcon, Film, Mic } from "lucide-react";
 
-export type ContextAction = "draft" | "note" | "link" | "image" | "video" | "voice";
+export type ContextAction = "note" | "link" | "image" | "video" | "voice";
 
 interface Props {
   x: number;
@@ -13,7 +13,6 @@ interface Props {
 }
 
 const ITEMS: { id: ContextAction; Icon: React.ComponentType<{ size?: number }>; label: string }[] = [
-  { id: "draft", Icon: FileText, label: "Draft" },
   { id: "note", Icon: StickyNote, label: "Note" },
   { id: "link", Icon: Link2, label: "URL" },
   { id: "image", Icon: ImageIcon, label: "Image" },

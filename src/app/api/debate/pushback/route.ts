@@ -17,19 +17,13 @@ Respond in JSON format only, no markdown:
 
 export async function POST(req: Request) {
   try {
-    const { counter, rebuttal, draft } = await req.json();
-    const userMsg = `Draft context: "${draft.title}"
-${draft.body.join("\n\n")}
+    const { counter, rebuttal, draft, intent } = await req.json();
+    let userMsg = `Draft context: "${draft.title}"
+${draft.body.join("\n\n")}`;
 
----
+    if (intent) userMsg += `\n\nAuthor's stated intent: "${intent}"`;
 
-Your original counter (stance: ${counter.stance}):
-"${counter.body}"
-
----
-
-The writer's rebuttal:
-"${rebuttal}"`;
+    userMsg += `\n\n---\n\nYour original counter (stance: ${counter.stance}):\n"${counter.body}"\n\n---\n\nThe writer's rebuttal:\n"${rebuttal}"`;
 
     const raw = await callGemini(MODEL, SYSTEM, userMsg);
     const data = parseJSON<{

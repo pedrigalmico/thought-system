@@ -1,21 +1,87 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Play, Square, Mic } from "lucide-react";
 import { CardHandle } from "./CardHandle";
 import { useStore } from "@/store/useStore";
 import type { CanvasItem, VoiceItem } from "@/lib/types";
 import { saveItem } from "@/lib/db";
 
+/* ── Lightweight markdown-lite parser for notes ──────────────────────────── */
+
+function parseNoteBody(raw: string): React.ReactNode[] {
+  const lines = raw.split("\n");
+  const nodes: React.ReactNode[] = [];
+  let bulletBuffer: string[] = [];
+  let key = 0;
+
+  const flushBullets = () => {
+    if (!bulletBuffer.length) return;
+    nodes.push(
+      <ul key={key++} className="note-bullets">
+        {bulletBuffer.map((b, i) => (
+          <li key={i}>{inlineFormat(b)}</li>
+        ))}
+      </ul>
+    );
+    bulletBuffer = [];
+  };
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
+    const bulletMatch = line.match(/^[-•]\s+(.+)/);
+
+    if (headingMatch) {
+      flushBullets();
+      const level = headingMatch[1].length as 1 | 2 | 3;
+      nodes.push(
+        <div key={key++} className={`note-h${level}`}>
+          {inlineFormat(headingMatch[2])}
+        </div>
+      );
+    } else if (bulletMatch) {
+      bulletBuffer.push(bulletMatch[1]);
+    } else {
+      flushBullets();
+      nodes.push(
+        <div key={key++} className="note-line">
+          {line === "" ? " " : inlineFormat(line)}
+        </div>
+      );
+    }
+  }
+  flushBullets();
+  return nodes;
+}
+
+function inlineFormat(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  let k = 0;
+
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    if (m[2]) parts.push(<strong key={k++}>{m[2]}</strong>);
+    else if (m[3]) parts.push(<em key={k++}>{m[3]}</em>);
+    else if (m[4]) parts.push(<code key={k++} className="note-code">{m[4]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 interface CardProps {
   item: CanvasItem;
   selected: boolean;
+  multiSelected?: boolean;
   topicId: string;
-  onSelect: () => void;
+  onSelect: (e: React.PointerEvent) => void;
   onDragStart: (e: React.PointerEvent) => void;
 }
 
-export function Card({ item, selected, topicId, onSelect, onDragStart }: CardProps) {
+export function Card({ item, selected, multiSelected, topicId, onSelect, onDragStart }: CardProps) {
   const updateItem = useStore((s) => s.updateItem);
   const cardRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{ sx: number; sy: number; ow: number; oh: number } | null>(null);
@@ -121,6 +187,7 @@ export function Card({ item, selected, topicId, onSelect, onDragStart }: CardPro
     item.kind === "link" && "link-card",
     item.kind === "draft" && "draft-card",
     selected && "selected",
+    multiSelected && "multi-selected",
   ]
     .filter(Boolean)
     .join(" ");
@@ -129,7 +196,7 @@ export function Card({ item, selected, topicId, onSelect, onDragStart }: CardPro
     left: item.x,
     top: item.y,
     width: item.w,
-    height: item.h,
+    height: item.kind === "draft" || item.kind === "note" ? "auto" : item.h,
   };
 
   return (
@@ -310,6 +377,8 @@ function NoteBody({
     if (val) setEditing(false);
   }, [item, topicId, updateItem]);
 
+  const formatted = useMemo(() => (item.body ? parseNoteBody(item.body) : null), [item.body]);
+
   if (editing || (selected && !item.body)) {
     return (
       <div className="card-body" style={{ height: "auto" }}>
@@ -331,7 +400,7 @@ function NoteBody({
 
   return (
     <div ref={bodyRef} className="card-body" style={{ height: "auto" }} onDoubleClick={() => setEditing(true)}>
-      <div className="note-text">{item.body}</div>
+      <div className="note-text">{formatted}</div>
       {item.tags && (
         <div className="note-meta">
           {item.tags.map((t) => (
@@ -345,6 +414,12 @@ function NoteBody({
 
 /* ── Draft: editable title + body ─────────────────────────────────────────── */
 
+function stripInlineImages(body: string[]): string[] {
+  return body
+    .map((p) => p.replace(/<img[^>]+src="data:[^"]*"[^>]*\/?>/gi, ""))
+    .filter((p) => p.trim());
+}
+
 function DraftBody({
   item,
   selected,
@@ -356,14 +431,37 @@ function DraftBody({
   topicId: string;
   updateItem: (id: string, patch: Partial<CanvasItem>) => void;
 }) {
-  const isEmpty = !item.title && item.body.length === 0;
+  const displayBody = stripInlineImages(item.body);
+  const isEmpty = !item.title && displayBody.length === 0;
   const [editing, setEditing] = useState(isEmpty);
   const titleRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const viewRef = useRef<HTMLDivElement>(null);
+
+  const autoSize = useCallback(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, []);
 
   useEffect(() => {
     if (editing && titleRef.current) titleRef.current.focus();
   }, [editing]);
+
+  useEffect(() => {
+    if (editing) autoSize();
+  }, [editing, autoSize]);
+
+  useLayoutEffect(() => {
+    if (editing) return;
+    const el = viewRef.current;
+    if (!el) return;
+    const newH = Math.max(200, el.offsetHeight);
+    if (Math.abs(newH - item.h) > 2) {
+      updateItem(item.id, { h: newH } as Partial<CanvasItem>);
+    }
+  }, [editing, item.body, item.title, item.h, item.id, updateItem]);
 
   const commit = useCallback(() => {
     const title = titleRef.current?.value ?? item.title;
@@ -394,10 +492,11 @@ function DraftBody({
         <textarea
           ref={bodyRef}
           className="note-textarea"
-          defaultValue={item.body.join("\n\n")}
+          defaultValue={displayBody.join("\n\n")}
           placeholder="Write your argument… (blank line = new paragraph)"
-          style={{ minHeight: 180 }}
+          style={{ minHeight: 120, overflow: "hidden" }}
           onBlur={commit}
+          onChange={autoSize}
           onKeyDown={(e) => { if (e.key === "Escape") commit(); }}
           onPointerDown={(e) => e.stopPropagation()}
         />
@@ -406,13 +505,13 @@ function DraftBody({
   }
 
   return (
-    <div className="card-body" onDoubleClick={() => setEditing(true)}>
+    <div ref={viewRef} className="card-body" onDoubleClick={() => setEditing(true)}>
       {item.pretitle && <div className="draft-pretitle">{item.pretitle}</div>}
       <div className="draft-title" style={{ opacity: item.title ? 1 : 0.35, fontStyle: item.title ? "normal" : "italic" }}>
         {item.title || "Untitled draft — double-click to write"}
       </div>
       <div className="draft-body">
-        {item.body.map((p, i) => (
+        {displayBody.map((p, i) => (
           <p key={i} dangerouslySetInnerHTML={{ __html: p }} />
         ))}
       </div>

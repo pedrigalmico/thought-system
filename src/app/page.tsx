@@ -7,20 +7,18 @@ import type { Gate } from "@/lib/types";
 
 const GATE_COLORS: Record<Gate, string> = {
   seed: "",
-  debate: "debate",
   refine: "refine",
   export: "export",
 };
 
 const GATE_LABEL: Record<Gate, string> = {
   seed: "Seed",
-  debate: "Debate",
   refine: "Refine",
   export: "Export",
 };
 
 const MOCK_TOPICS: TopicDoc[] = [
-  { id: "demo-1", title: "AI in 3D", subtitle: "Does generative 3D kill the art director, or free them?", gate: "debate", itemCount: 12, updatedAt: Date.now() - 3600000, createdAt: Date.now() - 86400000 },
+  { id: "demo-1", title: "AI in 3D", subtitle: "Does generative 3D kill the art director, or free them?", gate: "refine", itemCount: 12, updatedAt: Date.now() - 3600000, createdAt: Date.now() - 86400000 },
   { id: "demo-2", title: "Strategic Design", subtitle: "Why every design team eventually becomes a cost center.", gate: "seed", itemCount: 8, updatedAt: Date.now() - 7200000, createdAt: Date.now() - 172800000 },
   { id: "demo-3", title: "AR/VR Trends", subtitle: "Spatial computing hype cycle — where are we actually?", gate: "refine", itemCount: 5, updatedAt: Date.now() - 172800000, createdAt: Date.now() - 259200000 },
 ];

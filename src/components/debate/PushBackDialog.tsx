@@ -23,6 +23,7 @@ export function PushBackDialog({ counter, draft, onClose }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const updateCounter = useStore((s) => s.updateCounter);
   const setCounterStatus = useStore((s) => s.setCounterStatus);
+  const intent = useStore((s) => s.intent);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -34,7 +35,7 @@ export function PushBackDialog({ counter, draft, onClose }: Props) {
     setError(null);
 
     try {
-      const res = await pushBackApi(counter, rebuttal.trim(), draft);
+      const res = await pushBackApi(counter, rebuttal.trim(), draft, intent || undefined);
       setResult(res);
 
       updateCounter(counter.id, {

@@ -18,8 +18,9 @@ Respond in JSON format only, no markdown:
 
 export async function POST(req: Request) {
   try {
-    const { draft } = await req.json();
-    const userMsg = `Draft title: ${draft.title}\n\nDraft body:\n${draft.body.join("\n\n")}`;
+    const { draft, intent } = await req.json();
+    let userMsg = `Draft title: ${draft.title}\n\nDraft body:\n${draft.body.join("\n\n")}`;
+    if (intent) userMsg += `\n\n---\n\nAuthor's stated intent: "${intent}"\nFlag tone issues that would undermine this intent or weaken the post's ability to achieve it.`;
 
     const raw = await callGemini(MODEL, SYSTEM, userMsg);
     const data = parseJSON<{ scrubs: unknown[] }>(raw);

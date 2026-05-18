@@ -8,7 +8,6 @@ import { updateTopicGate } from "@/lib/db";
 
 const GATES: { id: Gate; label: string }[] = [
   { id: "seed", label: "Seed" },
-  { id: "debate", label: "Debate" },
   { id: "refine", label: "Refine" },
   { id: "export", label: "Export" },
 ];

@@ -1,4 +1,4 @@
-export type Gate = "seed" | "debate" | "refine" | "export";
+export type Gate = "seed" | "refine" | "export";
 export type Tool = "select" | "lasso" | "note" | "image" | "link" | "voice";
 export type ItemKind = "note" | "image" | "video" | "voice" | "link" | "draft";
 

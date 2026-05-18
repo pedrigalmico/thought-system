@@ -119,12 +119,44 @@ export async function deleteCluster(topicId: string, clusterId: string) {
   await deleteDoc(doc(db, "topics", topicId, "clusters", clusterId));
 }
 
+export async function syncSnapshot(
+  topicId: string,
+  items: CanvasItem[],
+  clusters: import("./types").Cluster[]
+) {
+  if (!FIREBASE_ENABLED) return;
+  const { writeBatch } = await import("firebase/firestore");
+  const batch = writeBatch(db);
+
+  const itemSnap = await getDocs(collection(db, "topics", topicId, "items"));
+  const existingItemIds = new Set(itemSnap.docs.map((d) => d.id));
+  const newItemIds = new Set(items.map((i) => i.id));
+  for (const d of itemSnap.docs) {
+    if (!newItemIds.has(d.id)) batch.delete(d.ref);
+  }
+  for (const item of items) {
+    batch.set(doc(db, "topics", topicId, "items", item.id), item);
+  }
+
+  const clusterSnap = await getDocs(collection(db, "topics", topicId, "clusters"));
+  const newClusterIds = new Set(clusters.map((c) => c.id));
+  for (const d of clusterSnap.docs) {
+    if (!newClusterIds.has(d.id)) batch.delete(d.ref);
+  }
+  for (const c of clusters) {
+    batch.set(doc(db, "topics", topicId, "clusters", c.id), c);
+  }
+
+  await batch.commit();
+}
+
 // ─── Debate state ────────────────────────────────────────────────────────────
 
 export interface DebateStateDoc {
   counters: Counter[];
   realityRows: RealityRow[];
   scrubRows: ScrubRow[];
+  intent?: string;
   updatedAt: number;
 }
 
@@ -147,6 +179,24 @@ export async function loadDebateState(
   const snap = await getDocSnap(doc(db, "topics", topicId, "debate", "state"));
   if (!snap.exists()) return null;
   return snap.data() as DebateStateDoc;
+}
+
+// ─── Intent ──────────────────────────────────────────────────────────────────
+
+export async function saveIntent(topicId: string, intent: string) {
+  if (!FIREBASE_ENABLED) return;
+  await setDoc(doc(db, "topics", topicId, "debate", "intent"), {
+    intent,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function loadIntent(topicId: string): Promise<string> {
+  if (!FIREBASE_ENABLED) return "";
+  const { getDoc: getDocSnap } = await import("firebase/firestore");
+  const snap = await getDocSnap(doc(db, "topics", topicId, "debate", "intent"));
+  if (!snap.exists()) return "";
+  return (snap.data() as { intent: string }).intent ?? "";
 }
 
 // ─── Image → base64 (stored inline in Firestore, no Storage needed) ──────────

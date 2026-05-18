@@ -19,9 +19,13 @@ Respond in JSON format only, no markdown:
 
 export async function POST(req: Request) {
   try {
-    const { draft, adoptedCounters, acceptedScrubs } = await req.json();
+    const { draft, adoptedCounters, acceptedScrubs, intent } = await req.json();
 
     let userMsg = `Original draft title: ${draft.title}\n\nOriginal draft body:\n${draft.body.join("\n\n")}`;
+
+    if (intent) {
+      userMsg += `\n\n---\n\nAuthor's stated intent: "${intent}"\nEnsure the rewritten draft stays aligned with this intent.`;
+    }
 
     if (adoptedCounters?.length) {
       userMsg += "\n\n---\n\nAdopted revisions to incorporate:";

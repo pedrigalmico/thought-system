@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, ArrowRight, Eye } from "lucide-react";
+import { Loader2, Check } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { synthesizeDraft } from "@/lib/ai";
 import { saveItem } from "@/lib/db";
@@ -12,13 +12,11 @@ export function SynthesisFooter() {
   const items = useStore((s) => s.items);
   const scrubRows = useStore((s) => s.scrubRows);
   const topicId = useStore((s) => s.topicId);
+  const commitSynthesis = useStore((s) => s.commitSynthesis);
   const setSynthesizedDraft = useStore((s) => s.setSynthesizedDraft);
   const synthesizedDraft = useStore((s) => s.synthesizedDraft);
-  const showDiff = useStore((s) => s.showDiff);
-  const setShowDiff = useStore((s) => s.setShowDiff);
-  const commitSynthesis = useStore((s) => s.commitSynthesis);
-  const setGate = useStore((s) => s.setGate);
   const updateItem = useStore((s) => s.updateItem);
+  const intent = useStore((s) => s.intent);
 
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +32,7 @@ export function SynthesisFooter() {
     if (!draft || loading) return;
     setLoading(true);
     try {
-      const result = await synthesizeDraft(draft, adopted, acceptedScrubs.length > 0 ? acceptedScrubs : undefined);
+      const result = await synthesizeDraft(draft, adopted, acceptedScrubs.length > 0 ? acceptedScrubs : undefined, intent || undefined);
       const synthDraft: DraftItem = {
         ...draft,
         title: result.title,
@@ -50,12 +48,11 @@ export function SynthesisFooter() {
     }
   };
 
-  const handleMoveToRefine = async () => {
+  const handleApply = async () => {
     commitSynthesis();
-    // Persist the updated draft to Firestore
-    if (topicId) {
+    if (topicId && synthesizedDraft) {
       const updatedDraft = items.find((i) => i.kind === "draft");
-      if (updatedDraft && synthesizedDraft) {
+      if (updatedDraft) {
         try {
           await saveItem(topicId, { ...updatedDraft, ...synthesizedDraft } as DraftItem);
         } catch (e) {
@@ -63,8 +60,9 @@ export function SynthesisFooter() {
         }
       }
     }
-    setGate("refine");
   };
+
+  if (total === 0) return null;
 
   return (
     <div className="synthesis-footer">
@@ -85,19 +83,10 @@ export function SynthesisFooter() {
           <div className="synthesis-summary">
             Draft synthesized — {synthesizedDraft.wordCount} words
           </div>
-          <div className="synthesis-actions">
-            <button
-              className="btn ghost"
-              onClick={() => setShowDiff(!showDiff)}
-            >
-              <Eye size={12} />
-              {showDiff ? "Hide changes" : "View changes"}
-            </button>
-            <button className="btn primary" onClick={handleMoveToRefine}>
-              Move to Refine
-              <ArrowRight size={12} />
-            </button>
-          </div>
+          <button className="btn primary" onClick={handleApply} style={{ width: "100%" }}>
+            <Check size={12} />
+            Apply to Draft
+          </button>
         </>
       ) : allResolved ? (
         <>
