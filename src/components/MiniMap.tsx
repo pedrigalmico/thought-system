@@ -33,7 +33,7 @@ export function MiniMap() {
     const vpH = winSize.h / zoom;
 
     const all = [
-      ...items.map((it) => ({ x: it.x, y: it.y, w: it.w, h: it.h })),
+      ...items.filter((it) => it.kind !== "draft").map((it) => ({ x: it.x, y: it.y, w: it.w, h: it.h })),
       ...clusters.map((c) => ({ x: c.x, y: c.y, w: c.w, h: c.h })),
       { x: vpX, y: vpY, w: vpW, h: vpH },
     ];
@@ -121,7 +121,7 @@ export function MiniMap() {
             }}
           />
         ))}
-        {items.map((it) => (
+        {items.filter((it) => it.kind !== "draft").map((it) => (
           <div
             key={it.id}
             className={`minimap-item ${it.kind === "image" ? "image" : ""} ${

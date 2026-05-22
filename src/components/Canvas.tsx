@@ -25,6 +25,7 @@ function uid() {
 
 const GRID = 24;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
+const MAX_IMAGES = 15;
 
 // Compress to JPEG, max 1400px on longest side, iterating quality until
 // the base64 string fits under 700 KB (safely within Firestore's 1 MB doc limit).
@@ -249,7 +250,7 @@ export function Canvas({ topicId }: Props) {
       const lx2 = (Math.max(lasso.sx, lasso.ex) - wrap.left - pan.x) / zoom;
       const ly2 = (Math.max(lasso.sy, lasso.ey) - wrap.top - pan.y) / zoom;
       const hit = items
-        .filter((it) => it.x < lx2 && it.x + it.w > lx1 && it.y < ly2 && it.y + it.h > ly1)
+        .filter((it) => it.kind !== "draft" && it.x < lx2 && it.x + it.w > lx1 && it.y < ly2 && it.y + it.h > ly1)
         .map((it) => it.id);
       if (hit.length > 0) {
         setSelectedIds(e.shiftKey ? [...new Set([...selectedIds, ...hit])] : hit);
@@ -421,6 +422,12 @@ export function Canvas({ topicId }: Props) {
 
   const handleImageFileSelect = useCallback(
     async (file: File) => {
+      const imageCount = useStore.getState().items.filter((it) => it.kind === "image").length;
+      if (imageCount >= MAX_IMAGES) {
+        alert(`You can add up to ${MAX_IMAGES} images per topic. Remove one before adding another.`);
+        pendingImagePos.current = null;
+        return;
+      }
       const pos = pendingImagePos.current ?? { x: 200, y: 200 };
       let raw: string;
       try { raw = await fileToBase64(file); } catch { raw = URL.createObjectURL(file); }
@@ -449,6 +456,11 @@ export function Canvas({ topicId }: Props) {
       // Image files
       for (const file of Array.from(e.dataTransfer.files)) {
         if (file.type.startsWith("image/")) {
+          const imageCount = useStore.getState().items.filter((it) => it.kind === "image").length;
+          if (imageCount >= MAX_IMAGES) {
+            alert(`You can add up to ${MAX_IMAGES} images per topic. Remove one before adding another.`);
+            return;
+          }
           let raw: string;
           try { raw = await fileToBase64(file); } catch { raw = URL.createObjectURL(file); }
           let processed: { src: string; w: number; h: number };
@@ -563,6 +575,11 @@ export function Canvas({ topicId }: Props) {
       const x = snap(raw.x), y = snap(raw.y);
       for (const item of Array.from(e.clipboardData?.items ?? [])) {
         if (item.type.startsWith("image/")) {
+          const imageCount = useStore.getState().items.filter((it) => it.kind === "image").length;
+          if (imageCount >= MAX_IMAGES) {
+            alert(`You can add up to ${MAX_IMAGES} images per topic. Remove one before adding another.`);
+            return;
+          }
           const file = item.getAsFile();
           if (!file) continue;
           let raw: string;
