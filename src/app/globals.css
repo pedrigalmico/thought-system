@@ -2274,16 +2274,205 @@ textarea { resize: none; }
   height: 0;
 }
 
+/* ── Version strip ── */
+.version-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 24px;
+}
+.version-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  border: 1px solid transparent;
+  border-radius: 100px;
+  background: none;
+  transition: all .2s ease;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font-plex-sans);
+}
+.version-tab:hover {
+  color: var(--ink-soft);
+  background: var(--line-soft);
+}
+.version-tab.active {
+  color: var(--ink);
+  background: var(--bg-elev-2);
+  border-color: var(--line);
+}
+.version-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  flex-shrink: 0;
+  transition: all .2s ease;
+}
+.version-tab.active .version-dot {
+  background: var(--coral);
+  box-shadow: 0 0 0 3px var(--coral-faint);
+}
+.version-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  margin-right: -4px;
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 0;
+  transition: all .15s;
+}
+.version-close:hover {
+  color: var(--ink);
+  background: var(--coral-faint);
+}
+.version-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--line);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+.version-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border: 1px dashed var(--line);
+  border-radius: 50%;
+  background: none;
+  transition: all .2s ease;
+}
+.version-add:hover {
+  color: var(--coral);
+  border-color: var(--coral-soft);
+  background: var(--coral-faint);
+}
+.version-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.version-add:disabled:hover {
+  color: var(--ink-faint);
+  border-color: var(--line);
+  background: none;
+}
+
+/* ── Version empty state ── */
+.version-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 320px;
+  padding: 48px 32px;
+  color: var(--ink-mute);
+  gap: 12px;
+}
+.version-empty-title {
+  font-family: var(--font-plex-serif);
+  font-size: 18px;
+  color: var(--ink);
+  margin-top: 4px;
+}
+.version-empty-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 360px;
+  color: var(--ink-mute);
+}
+.version-empty-intent {
+  color: var(--coral);
+}
+.version-generate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 24px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  font-family: var(--font-plex-sans);
+  color: var(--ink);
+  background: var(--coral-faint);
+  border: 1px solid var(--coral-soft);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.version-generate-btn:hover {
+  background: var(--coral-soft);
+  border-color: var(--coral);
+}
+.version-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .refine-stats {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--line-soft);
   display: flex;
+  align-items: center;
   gap: 14px;
   font-size: 9px;
   letter-spacing: 0.10em;
   text-transform: uppercase;
   color: var(--ink-mute);
+}
+.refine-stats .stats-ref {
+  color: var(--ink-faint);
+}
+.stats-regen {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 4px 12px 4px 10px;
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-family: var(--font-plex-sans);
+  color: var(--ink-faint);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-soft);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all .2s ease;
+  line-height: 1;
+}
+.stats-regen:hover {
+  color: var(--coral);
+  border-color: var(--coral-soft);
+  background: var(--coral-faint);
+}
+.stats-regen:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.stats-regen:disabled:hover {
+  color: var(--ink-faint);
+  border-color: var(--line-soft);
+  background: var(--bg-elev);
 }
 
 .adopted-revisions {

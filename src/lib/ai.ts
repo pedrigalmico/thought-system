@@ -1,6 +1,6 @@
 "use client";
 
-import type { Counter, DraftItem, RealityRow, ScrubRow, PushBackResult } from "./types";
+import type { Counter, DraftItem, RealityRow, ScrubRow, PushBackResult, VersionPlatform } from "./types";
 
 interface DraftPayload {
   title: string;
@@ -74,6 +74,19 @@ export async function pushBack(
     counter: { id: counter.id, stance: counter.stance, body: counter.body },
     rebuttal,
     draft: draftToPayload(draft),
+    intent,
+  });
+}
+
+export async function condenseDraft(
+  draft: DraftItem,
+  platform: VersionPlatform,
+  intent?: string,
+): Promise<{ title: string; body: string[]; wordCount: number }> {
+  return post("/api/condense", {
+    title: draft.title,
+    body: draft.body,
+    platform,
     intent,
   });
 }

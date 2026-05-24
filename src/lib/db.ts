@@ -5,6 +5,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   onSnapshot,
   query,
   orderBy,
@@ -88,6 +89,13 @@ export async function saveItem(topicId: string, item: CanvasItem) {
   await updateDoc(doc(db, "topics", topicId), {
     updatedAt: Date.now(),
     itemCount: (await getDocs(collection(db, "topics", topicId, "items"))).size,
+  });
+}
+
+export async function deleteVersionField(topicId: string, itemId: string) {
+  if (!FIREBASE_ENABLED) return;
+  await updateDoc(doc(db, "topics", topicId, "items", itemId), {
+    versions: deleteField(),
   });
 }
 

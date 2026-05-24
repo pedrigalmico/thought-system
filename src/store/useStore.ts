@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { CanvasItem, Cluster, Counter, DraftItem, Gate, RealityRow, ScrubRow, Tool } from "@/lib/types";
+import type { CanvasItem, Cluster, Counter, DraftItem, DraftVersion, Gate, RealityRow, ScrubRow, Tool, VersionPlatform } from "@/lib/types";
 
 
 type RingTab = "advocate" | "reality" | "tone";
@@ -50,6 +50,10 @@ interface State {
   analyzedDraftHash: string;
   staleRealityCheck: boolean;
   staleToneScrubber: boolean;
+
+  // Version state
+  activeVersion: VersionPlatform | null;
+  condensing: boolean;
 
   setTopic: (id: string, title: string) => void;
   setGate: (g: Gate) => void;
@@ -110,6 +114,12 @@ interface State {
   markToneStale: () => void;
   clearRealityStale: () => void;
   clearToneStale: () => void;
+
+  // Version actions
+  setActiveVersion: (platform: VersionPlatform | null) => void;
+  setCondensing: (v: boolean) => void;
+  updateVersion: (draftId: string, platform: VersionPlatform, patch: Partial<DraftVersion>) => void;
+  removeVersion: (draftId: string, platform: VersionPlatform) => void;
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -147,6 +157,10 @@ export const useStore = create<State>((set) => ({
   staleRealityCheck: false,
   staleToneScrubber: false,
 
+  // Version state
+  activeVersion: null,
+  condensing: false,
+
   setTopic: (id, title) =>
     set({
       topicId: id,
@@ -169,6 +183,8 @@ export const useStore = create<State>((set) => ({
       analyzedDraftHash: "",
       staleRealityCheck: false,
       staleToneScrubber: false,
+      activeVersion: null,
+      condensing: false,
     }),
 
   setGate: (g) =>
@@ -337,4 +353,42 @@ export const useStore = create<State>((set) => ({
         staleToneScrubber: true,
       };
     }),
+
+  // Version actions
+  setActiveVersion: (platform) => set({ activeVersion: platform }),
+  setCondensing: (v) => set({ condensing: v }),
+  updateVersion: (draftId, platform, patch) =>
+    set((s) => ({
+      items: s.items.map((it) => {
+        if (it.id !== draftId || it.kind !== "draft") return it;
+        const draft = it as DraftItem;
+        const existing = draft.versions?.[platform] ?? {
+          platform,
+          title: "",
+          body: [],
+          wordCount: 0,
+          updatedAt: Date.now(),
+        };
+        return {
+          ...draft,
+          versions: {
+            ...draft.versions,
+            [platform]: { ...existing, ...patch, updatedAt: Date.now() },
+          },
+        } as CanvasItem;
+      }),
+    })),
+  removeVersion: (draftId, platform) =>
+    set((s) => ({
+      items: s.items.map((it) => {
+        if (it.id !== draftId || it.kind !== "draft") return it;
+        const draft = it as DraftItem;
+        const { [platform]: _, ...rest } = draft.versions ?? {};
+        return {
+          ...draft,
+          versions: Object.keys(rest).length > 0 ? rest : undefined,
+        } as CanvasItem;
+      }),
+      activeVersion: s.activeVersion === platform ? null : s.activeVersion,
+    })),
 }));

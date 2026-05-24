@@ -58,6 +58,16 @@ export interface LinkItem extends BaseItem {
   snippet: string;
 }
 
+export type VersionPlatform = "linkedin";
+
+export interface DraftVersion {
+  platform: VersionPlatform;
+  title: string;
+  body: string[];
+  wordCount: number;
+  updatedAt: number;
+}
+
 export interface DraftItem extends BaseItem {
   kind: "draft";
   pretitle?: string;
@@ -65,6 +75,7 @@ export interface DraftItem extends BaseItem {
   body: string[];
   wordCount: number;
   slopFlags: number;
+  versions?: Record<VersionPlatform, DraftVersion>;
 }
 
 export type CanvasItem =

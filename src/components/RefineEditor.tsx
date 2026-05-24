@@ -11,12 +11,14 @@ import Underline from "@tiptap/extension-underline";
 import {
   Bold, Italic, Code, Underline as UnderlineIcon, Strikethrough,
   List, Heading2, Heading3, Link as LinkIcon, Image as ImageIcon,
-  FileVideo, Minus, Quote, Undo2, Redo2, PanelLeft,
+  FileVideo, Minus, Quote, Undo2, Redo2, PanelLeft, Plus, X, Loader2,
+  Sparkles, RefreshCw,
 } from "lucide-react";
 import { useStore } from "@/store/useStore";
-import { saveItem, fileToBase64, subscribeItems, loadDebateState, loadIntent } from "@/lib/db";
+import { saveItem, fileToBase64, subscribeItems, loadDebateState, loadIntent, deleteVersionField } from "@/lib/db";
+import { condenseDraft } from "@/lib/ai";
 import { CounterHighlight } from "@/lib/counterHighlight";
-import type { DraftItem, CanvasItem } from "@/lib/types";
+import type { DraftItem, CanvasItem, VersionPlatform } from "@/lib/types";
 
 function draftToHtml(draft: DraftItem): string {
   const parts: string[] = [];
@@ -62,6 +64,13 @@ export function RefineEditor({ topicId }: Props) {
   const setIntent = useStore((s) => s.setIntent);
   const sourcesOpen = useStore((s) => s.sourcesOpen);
   const toggleSources = useStore((s) => s.toggleSources);
+  const activeVersion = useStore((s) => s.activeVersion);
+  const setActiveVersion = useStore((s) => s.setActiveVersion);
+  const updateVersion = useStore((s) => s.updateVersion);
+  const removeVersion = useStore((s) => s.removeVersion);
+  const condensing = useStore((s) => s.condensing);
+  const setCondensing = useStore((s) => s.setCondensing);
+  const intent = useStore((s) => s.intent);
 
   const draft = items.find((i) => i.kind === "draft") as DraftItem | undefined;
   const autoCreated = useRef(false);
@@ -72,6 +81,8 @@ export function RefineEditor({ topicId }: Props) {
   const initializedRef = useRef(false);
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  const activeVersionRef = useRef(activeVersion);
+  activeVersionRef.current = activeVersion;
   const lastContentRef = useRef<{ body: string[]; wordCount: number } | null>(null);
 
   useEffect(() => {
@@ -128,8 +139,18 @@ export function RefineEditor({ topicId }: Props) {
         if (!d2) return;
         const pending = lastContentRef.current;
         if (!pending) return;
-        updateItem(d2.id, pending as Partial<CanvasItem>);
-        saveItem(topicId, { ...d2, ...pending }).catch(() => {});
+        const ver = activeVersionRef.current;
+        if (ver) {
+          updateVersion(d2.id, ver, pending);
+          const updatedVersions = {
+            ...d2.versions,
+            [ver]: { ...(d2.versions?.[ver] ?? { platform: ver, title: "", body: [], wordCount: 0 }), ...pending, updatedAt: Date.now() },
+          };
+          saveItem(topicId, { ...d2, versions: updatedVersions }).catch(() => {});
+        } else {
+          updateItem(d2.id, pending as Partial<CanvasItem>);
+          saveItem(topicId, { ...d2, ...pending }).catch(() => {});
+        }
         lastContentRef.current = null;
       }, 600);
     },
@@ -157,6 +178,46 @@ export function RefineEditor({ topicId }: Props) {
     }
   }, [synthesizedDraft, editor, draft]);
 
+  // ── Version switching: swap editor content when activeVersion changes ──
+  const prevVersionRef = useRef(activeVersion);
+  useEffect(() => {
+    if (!editor || !draft) return;
+    const prev = prevVersionRef.current;
+    prevVersionRef.current = activeVersion;
+    if (prev === activeVersion) return;
+
+    // Flush pending saves for the previous version
+    clearTimeout(saveTimer.current);
+    const d = draftRef.current;
+    const pending = lastContentRef.current;
+    if (d && pending) {
+      if (prev) {
+        updateVersion(d.id, prev, pending);
+        const updatedVersions = {
+          ...d.versions,
+          [prev]: { ...(d.versions?.[prev] ?? { platform: prev, title: "", body: [], wordCount: 0 }), ...pending, updatedAt: Date.now() },
+        };
+        saveItem(topicId, { ...d, versions: updatedVersions }).catch(() => {});
+      } else {
+        updateItem(d.id, pending as Partial<CanvasItem>);
+        saveItem(topicId, { ...d, ...pending }).catch(() => {});
+      }
+      lastContentRef.current = null;
+    }
+
+    // Swap content to the new version (or back to full post)
+    if (activeVersion) {
+      const ver = draft.versions?.[activeVersion];
+      const html = ver ? draftToHtml({ ...draft, body: ver.body, title: ver.title }) : "<p></p>";
+      editor.commands.setContent(html || "<p></p>");
+      setTitle(ver?.title ?? "");
+    } else {
+      const html = draftToHtml(draft);
+      editor.commands.setContent(html || "<p></p>");
+      setTitle(draft.title);
+    }
+  }, [activeVersion, editor, draft, topicId, updateItem, updateVersion]);
+
   // Flush pending edits on unmount so changes survive tab switches
   useEffect(() => {
     return () => {
@@ -164,12 +225,22 @@ export function RefineEditor({ topicId }: Props) {
       const d = draftRef.current;
       const pending = lastContentRef.current;
       if (d && pending) {
-        updateItem(d.id, pending as Partial<CanvasItem>);
-        saveItem(topicId, { ...d, ...pending }).catch(() => {});
+        const ver = activeVersionRef.current;
+        if (ver) {
+          updateVersion(d.id, ver, pending);
+          const updatedVersions = {
+            ...d.versions,
+            [ver]: { ...(d.versions?.[ver] ?? { platform: ver, title: "", body: [], wordCount: 0 }), ...pending, updatedAt: Date.now() },
+          };
+          saveItem(topicId, { ...d, versions: updatedVersions }).catch(() => {});
+        } else {
+          updateItem(d.id, pending as Partial<CanvasItem>);
+          saveItem(topicId, { ...d, ...pending }).catch(() => {});
+        }
         lastContentRef.current = null;
       }
     };
-  }, [topicId, updateItem]);
+  }, [topicId, updateItem, updateVersion]);
 
   // ── Restore saved debate + intent from Firebase on mount ──
   useEffect(() => {
@@ -211,10 +282,20 @@ export function RefineEditor({ topicId }: Props) {
     saveTimer.current = setTimeout(() => {
       const d2 = draftRef.current;
       if (!d2) return;
-      updateItem(d2.id, { title: val } as Partial<CanvasItem>);
-      saveItem(topicId, { ...d2, title: val }).catch(() => {});
+      const ver = activeVersionRef.current;
+      if (ver) {
+        updateVersion(d2.id, ver, { title: val });
+        const updatedVersions = {
+          ...d2.versions,
+          [ver]: { ...(d2.versions?.[ver] ?? { platform: ver, title: "", body: [], wordCount: 0, updatedAt: 0 }), title: val, updatedAt: Date.now() },
+        };
+        saveItem(topicId, { ...d2, versions: updatedVersions }).catch(() => {});
+      } else {
+        updateItem(d2.id, { title: val } as Partial<CanvasItem>);
+        saveItem(topicId, { ...d2, title: val }).catch(() => {});
+      }
     }, 600);
-  }, [topicId, updateItem]);
+  }, [topicId, updateItem, updateVersion]);
 
   const addImage = useCallback(() => {
     fileRef.current?.click();
@@ -246,6 +327,51 @@ export function RefineEditor({ topicId }: Props) {
     }
   }, [editor]);
 
+  const handleCondense = useCallback(async (platform: VersionPlatform) => {
+    const d = draftRef.current;
+    if (!d || d.body.length === 0 || condensing) return;
+    setCondensing(true);
+    try {
+      const result = await condenseDraft(d, platform, intent || undefined);
+      const version = {
+        platform,
+        title: result.title,
+        body: result.body,
+        wordCount: result.wordCount,
+        updatedAt: Date.now(),
+      };
+      updateVersion(d.id, platform, version);
+      const updatedVersions = { ...d.versions, [platform]: version };
+      await saveItem(topicId, { ...d, versions: updatedVersions });
+
+      // Push content into the editor and set title
+      if (editor) {
+        const html = draftToHtml({ ...d, body: result.body, title: result.title });
+        editor.commands.setContent(html || "<p></p>");
+        setTitle(result.title);
+      }
+      setActiveVersion(platform);
+    } catch (err) {
+      console.error("Condense failed:", err);
+    } finally {
+      setCondensing(false);
+    }
+  }, [topicId, condensing, setCondensing, updateVersion, setActiveVersion, editor, intent]);
+
+  const handleRemoveVersion = useCallback((platform: VersionPlatform) => {
+    const d = draftRef.current;
+    if (!d) return;
+    removeVersion(d.id, platform);
+    const { [platform]: _, ...rest } = d.versions ?? {};
+    if (Object.keys(rest).length > 0) {
+      saveItem(topicId, { ...d, versions: rest as DraftItem["versions"] }).catch(() => {});
+    } else {
+      deleteVersionField(topicId, d.id).catch(() => {});
+    }
+  }, [topicId, removeVersion]);
+
+  const versionPlatforms = draft?.versions ? (Object.keys(draft.versions) as VersionPlatform[]) : [];
+
   if (!draft) {
     return (
       <div className="refine-wrap">
@@ -259,11 +385,54 @@ export function RefineEditor({ topicId }: Props) {
   return (
     <div className="refine-wrap">
       <div className="refine-editor">
+        <div className="version-strip">
+          <button
+            className={`version-tab${activeVersion === null ? " active" : ""}`}
+            onClick={() => setActiveVersion(null)}
+          >
+            <span className="version-dot" />
+            Full Post
+          </button>
+          {versionPlatforms.map((p) => (
+            <button
+              key={p}
+              className={`version-tab${activeVersion === p ? " active" : ""}`}
+              onClick={() => setActiveVersion(p)}
+            >
+              <span className="version-dot" />
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+              <span
+                className="version-close"
+                onClick={(e) => { e.stopPropagation(); handleRemoveVersion(p); }}
+              >
+                <X size={10} />
+              </span>
+            </button>
+          ))}
+          <span className="version-sep" />
+          {!draft.versions?.linkedin && (
+            <button
+              className="version-add"
+              onClick={() => {
+                updateVersion(draft.id, "linkedin", { platform: "linkedin", title: "", body: [], wordCount: 0 });
+                saveItem(topicId, {
+                  ...draft,
+                  versions: { ...draft.versions, linkedin: { platform: "linkedin", title: "", body: [], wordCount: 0, updatedAt: Date.now() } },
+                }).catch(() => {});
+                setActiveVersion("linkedin");
+              }}
+              title="Add LinkedIn version"
+            >
+              <Plus size={12} />
+            </button>
+          )}
+        </div>
+
         <input
           className="refine-title"
           value={title}
           onChange={(e) => saveTitle(e.target.value)}
-          placeholder="Post title..."
+          placeholder={activeVersion ? `${activeVersion.charAt(0).toUpperCase() + activeVersion.slice(1)} title...` : "Post title..."}
         />
 
         {editor && (
@@ -292,11 +461,49 @@ export function RefineEditor({ topicId }: Props) {
           </div>
         )}
 
+        {activeVersion && (!draft.versions?.[activeVersion] || (draft.versions[activeVersion].wordCount ?? 0) === 0) && (
+          <div className="version-empty">
+            <Sparkles size={20} />
+            <div className="version-empty-title">Generate {activeVersion.charAt(0).toUpperCase() + activeVersion.slice(1)} Teaser</div>
+            <div className="version-empty-desc">
+              AI will condense your full post into a short, hook-driven teaser that drives readers to your website.
+              {intent && <span className="version-empty-intent"> Guided by your intent.</span>}
+            </div>
+            <button
+              className="version-generate-btn"
+              onClick={() => handleCondense(activeVersion)}
+              disabled={condensing || draft.body.length === 0}
+            >
+              {condensing ? <><Loader2 size={14} className="spin" /> Generating...</> : <><Sparkles size={14} /> Generate from full post</>}
+            </button>
+          </div>
+        )}
+
         <EditorContent editor={editor} />
 
         <div className="refine-stats">
-          <span>{draft.wordCount} words</span>
-          {draft.slopFlags > 0 && <span>{draft.slopFlags} slop flags</span>}
+          {activeVersion ? (
+            <>
+              <span>{draft.versions?.[activeVersion]?.wordCount ?? 0} words</span>
+              <span className="stats-ref">full post: {draft.wordCount}</span>
+              {draft.versions?.[activeVersion] && (draft.versions[activeVersion].wordCount ?? 0) > 0 && (
+                <button
+                  className="stats-regen"
+                  onClick={() => handleCondense(activeVersion)}
+                  disabled={condensing}
+                  title="Regenerate from full post"
+                >
+                  {condensing ? <Loader2 size={10} className="spin" /> : <RefreshCw size={10} />}
+                  Regenerate
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <span>{draft.wordCount} words</span>
+              {draft.slopFlags > 0 && <span>{draft.slopFlags} slop flags</span>}
+            </>
+          )}
         </div>
       </div>
 
