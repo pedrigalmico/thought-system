@@ -2475,6 +2475,49 @@ textarea { resize: none; }
   background: var(--bg-elev);
 }
 
+/* ── Condensing animation ── */
+.refine-editor-area {
+  position: relative;
+}
+.refine-editor-area.condensing {
+  border-radius: 6px;
+}
+.refine-editor-area.condensing .refine-prosemirror {
+  pointer-events: none;
+  animation: text-pulse-highlight 1.6s ease-in-out infinite;
+}
+.condensing-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+.condensing-scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 80px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    oklch(65% 0.18 40 / 0.06) 20%,
+    oklch(65% 0.18 40 / 0.13) 50%,
+    oklch(65% 0.18 40 / 0.06) 80%,
+    transparent 100%
+  );
+  animation: scanline-sweep 2s ease-in-out infinite;
+}
+@keyframes scanline-sweep {
+  0% { top: -80px; }
+  100% { top: 100%; }
+}
+@keyframes text-pulse-highlight {
+  0%, 100% { color: var(--ink); text-shadow: none; }
+  50% { color: var(--coral); text-shadow: 0 0 12px oklch(65% 0.18 40 / 0.3); }
+}
+
 .adopted-revisions {
   margin-top: 24px;
   padding-top: 20px;

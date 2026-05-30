@@ -82,12 +82,14 @@ export async function condenseDraft(
   draft: DraftItem,
   platform: VersionPlatform,
   intent?: string,
+  existingDraft?: { title: string; body: string[]; wordCount: number },
 ): Promise<{ title: string; body: string[]; wordCount: number }> {
   return post("/api/condense", {
     title: draft.title,
     body: draft.body,
     platform,
     intent,
+    existingDraft,
   });
 }
 

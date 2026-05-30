@@ -332,7 +332,12 @@ export function RefineEditor({ topicId }: Props) {
     if (!d || d.body.length === 0 || condensing) return;
     setCondensing(true);
     try {
-      const result = await condenseDraft(d, platform, intent || undefined);
+      // If the version already has content, pass it as existingDraft (tighten mode)
+      const ver = d.versions?.[platform];
+      const existing = ver && ver.wordCount > 0
+        ? { title: ver.title, body: ver.body, wordCount: ver.wordCount }
+        : undefined;
+      const result = await condenseDraft(d, platform, intent || undefined, existing);
       const version = {
         platform,
         title: result.title,
@@ -479,7 +484,14 @@ export function RefineEditor({ topicId }: Props) {
           </div>
         )}
 
-        <EditorContent editor={editor} />
+        <div className={`refine-editor-area${condensing ? " condensing" : ""}`}>
+          <EditorContent editor={editor} />
+          {condensing && (
+            <div className="condensing-overlay">
+              <div className="condensing-scanline" />
+            </div>
+          )}
+        </div>
 
         <div className="refine-stats">
           {activeVersion ? (
@@ -491,10 +503,10 @@ export function RefineEditor({ topicId }: Props) {
                   className="stats-regen"
                   onClick={() => handleCondense(activeVersion)}
                   disabled={condensing}
-                  title="Regenerate from full post"
+                  title="Tighten your draft"
                 >
-                  {condensing ? <Loader2 size={10} className="spin" /> : <RefreshCw size={10} />}
-                  Regenerate
+                  {condensing ? <Loader2 size={10} className="spin" /> : <Sparkles size={10} />}
+                  Tighten
                 </button>
               )}
             </>
